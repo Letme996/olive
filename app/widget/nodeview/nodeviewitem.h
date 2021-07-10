@@ -1,7 +1,7 @@
 /***
 
   Olive - Non-Linear Video Editor
-  Copyright (C) 2019 Olive Team
+  Copyright (C) 2021 Olive Team
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,12 +24,14 @@
 #include <QFontMetrics>
 #include <QGraphicsRectItem>
 #include <QLinearGradient>
-#include <QUndoCommand>
 #include <QWidget>
 
 #include "node/node.h"
-#include "nodeviewedge.h"
-#include "nodeviewitemwidgetproxy.h"
+#include "nodeviewcommon.h"
+
+namespace olive {
+
+class NodeViewEdge;
 
 /**
  * @brief A visual widget representation of a Node object to be used in a NodeView
@@ -43,37 +45,71 @@ class NodeViewItem : public QGraphicsRectItem
 public:
   NodeViewItem(QGraphicsItem* parent = nullptr);
 
+  QPointF GetNodePosition() const;
+  void SetNodePosition(const QPointF& pos);
+
   /**
    * @brief Set the Node to correspond to this widget
    */
   void SetNode(Node* n);
 
   /**
-   * @brief Get currently attached noe
+   * @brief Get currently attached node
    */
-  Node* node();
+  Node* GetNode() const
+  {
+    return node_;
+  }
 
   /**
    * @brief Get expanded state
    */
-  bool IsExpanded();
+  bool IsExpanded() const
+  {
+    return expanded_;
+  }
 
   /**
    * @brief Set expanded state
    */
-  void SetExpanded(bool e);
+  void SetExpanded(bool e, bool hide_titlebar = false);
+  void ToggleExpanded();
 
   /**
-   * @brief Get the rectangle of a specific parameter connector
-   *
-   * Useful for drawing parameter connectors (white squares where the Node edges attach) or determining whether a click
-   * or drag occurred within one.
-   *
-   * @param index
-   *
-   * Index of the parameter of this node (see NodeParam::index()).
+   * @brief Returns GLOBAL point that edges should connect to for any NodeParam member of this object
    */
-  QRectF GetParameterConnectorRect(int index);
+  QPointF GetInputPoint(const QString& input, int element, const QPointF &source_pos) const;
+
+  QPointF GetOutputPoint(const QString &output) const;
+
+  /**
+   * @brief Sets the direction nodes are flowing
+   */
+  void SetFlowDirection(NodeViewCommon::FlowDirection dir);
+
+  static int DefaultTextPadding();
+
+  static int DefaultItemHeight();
+
+  static int DefaultItemWidth();
+
+  static int DefaultItemBorder();
+
+  qreal DefaultItemHorizontalPadding() const;
+
+  qreal DefaultItemVerticalPadding() const;
+
+  void AddEdge(NodeViewEdge* edge);
+  void RemoveEdge(NodeViewEdge* edge);
+
+  int GetIndexAt(QPointF pt) const;
+
+  NodeInput GetInputAtIndex(int index) const
+  {
+    return NodeInput(node_, node_inputs_.at(index));
+  }
+
+  void SetHighlightedIndex(int index);
 
 protected:
   virtual void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget = nullptr) override;
@@ -81,17 +117,24 @@ protected:
   virtual void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
   virtual void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
   virtual void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
+  virtual void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event) override;
+
+  virtual QVariant itemChange(QGraphicsItem::GraphicsItemChange change, const QVariant &value) override;
 
 private:
-  /**
-   * @brief Get the relative position to draw text for a parameter at a certain index
-   */
-  QPointF GetParameterTextPoint(int index);
+  void ReadjustAllEdges();
+
+  void DrawNodeTitle(QPainter *painter, QString text, const QRectF &rect, Qt::Alignment vertical_align, int icon_size, bool draw_arrow);
 
   /**
-   * @brief Variable for the expand/collapse button rect (stored for clicking)
+   * @brief Returns local rect of a NodeInput in array node_inputs_[index]
    */
-  QRectF expand_hitbox_;
+  QRectF GetInputRect(int index) const;
+
+  /**
+   * @brief Returns local point that edges should connect to for a NodeInput in array node_inputs_[index]
+   */
+  QPointF GetInputPointInternal(int index, const QPointF &source_pos) const;
 
   /**
    * @brief Reference to attached Node
@@ -99,38 +142,16 @@ private:
   Node* node_;
 
   /**
-   * @brief A QWidget that can receive CSS properties that NodeViewItem can use
-   *
-   * \see NodeViewItemWidget
+   * @brief Cached list of node inputs
    */
-  NodeViewItemWidget css_proxy_;
+  QVector<QString> node_inputs_;
 
   /**
    * @brief Rectangle of the Node's title bar (equal to rect() when collapsed)
    */
   QRectF title_bar_rect_;
 
-  /**
-   * @brief Rectangle of the Node's content (zero-size when collapsed, (rect() - title_bar_rect_) when expanded)
-   */
-  QRectF content_rect_;
-
-  /// Used to determine certain padding/margin variables for high DPI support
-  QFont font;
-  QFontMetrics font_metrics;
-
-  /// Edge dragging variables
-  NodeViewEdge* dragging_edge_;
-  QPointF dragging_edge_start_;
-  NodeParam* drag_src_param_;
-  NodeParam* drag_dest_param_;
-  NodeViewItem* drag_source_;
-  NodeViewItem* drag_expanded_item_;
-
   /// Sizing variables to use when drawing
-  int node_connector_size_;
-  int node_text_padding_;
-  int node_icon_padding_;
   int node_border_width_;
 
   /**
@@ -138,21 +159,16 @@ private:
    */
   bool expanded_;
 
-  /**
-   * @brief Current click mode
-   *
-   * \see mousePressEvent()
-   */
-  bool standard_click_;
+  bool hide_titlebar_;
 
-  /**
-   * @brief QUndoCommand for creating and deleting edges by dragging
-   *
-   * \see mousePressEvent()
-   * \see mouseReleaseEvent()
-   */
-  QUndoCommand* node_edge_change_command_;
+  int highlighted_index_;
+
+  NodeViewCommon::FlowDirection flow_dir_;
+
+  QVector<NodeViewEdge*> edges_;
 
 };
+
+}
 
 #endif // NODEVIEWITEM_H

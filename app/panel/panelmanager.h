@@ -1,7 +1,7 @@
 /***
 
   Olive - Non-Linear Video Editor
-  Copyright (C) 2019 Olive Team
+  Copyright (C) 2021 Olive Team
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,8 +24,9 @@
 #include <QObject>
 #include <QList>
 
-#include "panel/viewer/viewer.h"
 #include "widget/panel/panel.h"
+
+namespace olive {
 
 /**
  * @brief The PanelFocusManager class
@@ -45,7 +46,7 @@ class PanelManager : public QObject
 {
   Q_OBJECT
 public:
-  PanelManager(QObject* parent);
+  PanelManager(QObject* parent = nullptr);
 
   /**
    * @brief Destroy all panels
@@ -88,8 +89,6 @@ public:
   template<class T>
   /**
    * @brief Create a panel
-   * @param parent
-   * @return
    */
   T* CreatePanel(QWidget* parent);
 
@@ -97,6 +96,29 @@ public:
    * @brief Get whether panels are currently prevented from moving
    */
   bool ArePanelsLocked();
+
+  /**
+   * @brief Create PanelManager singleton instance
+   */
+  static void CreateInstance();
+
+  /**
+   * @brief Destroy PanelManager singleton instance
+   *
+   * If no PanelManager was created, this is a no-op.
+   */
+  static void DestroyInstance();
+
+  /**
+   * @brief Access to PanelManager singleton instance
+   */
+  static PanelManager* instance();
+
+  template<class T>
+  /**
+   * @brief Get a list of panels of a certain type
+   */
+  QList<T*> GetPanelsOfType();
 
 public slots:
   /**
@@ -111,6 +133,12 @@ public slots:
    */
   void SetPanelsLocked(bool locked);
 
+signals:
+  /**
+   * @brief Signal emitted when the currently focused panel changes
+   */
+  void FocusedPanelChanged(PanelWidget* panel);
+
 private:
   /**
    * @brief History array for traversing through (see MostRecentlyFocused())
@@ -121,6 +149,25 @@ private:
    * @brief Internal panel movement is locked value
    */
   bool locked_;
+
+  /**
+   * @brief PanelManager singleton instance
+   */
+  static PanelManager* instance_;
+
+  /**
+   * @brief The last panel that was focused
+   *
+   * Stored to prevent emitting FocusedPanelChanged() multiple times for the same panel
+   */
+  PanelWidget* last_focused_panel_;
+
+private slots:
+  /**
+   * @brief Processing if a panel gets deleted
+   */
+  void PanelDestroyed();
+
 };
 
 template<class T>
@@ -128,10 +175,25 @@ T *PanelManager::CreatePanel(QWidget *parent)
 {
   T* panel = new T(parent);
 
-  panel->SetMovementLocked(locked_);
-
   // Add panel to the bottom of the focus history
   focus_history_.append(panel);
+
+  panel->SetMovementLocked(locked_);
+
+  // Sane default for panel size
+  panel->resize(parent->size() / 3);
+
+  // We're about to center the panel relative to the parent (usually the main window), but for some
+  // reason this requires the panel to be shown first.
+  panel->show();
+
+  // Center the panel relative to the parent
+  QPoint parent_center = panel->mapFromGlobal(parent->mapToGlobal(parent->rect().center()));
+  QPoint panel_center = panel->rect().center();
+  panel->move(parent_center - panel_center);
+
+  // Connect destroy signal so we can remove it from focus history
+  connect(panel, &PanelWidget::destroyed, this, &PanelManager::PanelDestroyed, Qt::DirectConnection);
 
   return panel;
 }
@@ -152,8 +214,24 @@ T* PanelManager::MostRecentlyFocused()
   return nullptr;
 }
 
-namespace olive {
-extern PanelManager* panel_manager;
+template<class T>
+QList<T*> PanelManager::GetPanelsOfType()
+{
+  QList<T*> panels;
+
+  T* cast_test;
+
+  foreach (PanelWidget* panel, focus_history_) {
+    cast_test = dynamic_cast<T*>(panel);
+
+    if (cast_test) {
+      panels.append(cast_test);
+    }
+  }
+
+  return panels;
+}
+
 }
 
 #endif // PANELFOCUSMANAGER_H

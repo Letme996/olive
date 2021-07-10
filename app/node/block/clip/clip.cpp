@@ -1,7 +1,7 @@
 /***
 
   Olive - Non-Linear Video Editor
-  Copyright (C) 2019 Olive Team
+  Copyright (C) 2021 Olive Team
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -20,25 +20,22 @@
 
 #include "clip.h"
 
-ClipBlock::ClipBlock()
+namespace olive {
+
+#define super Block
+
+const QString ClipBlock::kBufferIn = QStringLiteral("buffer_in");
+
+ClipBlock::ClipBlock(bool create_buffer_in)
 {
-  texture_input_ = new NodeInput("buffer_in");
-  texture_input_->set_data_type(NodeInput::kBuffer);
-  AddInput(texture_input_);
+  if (create_buffer_in) {
+    AddInput(kBufferIn, NodeValue::kNone, InputFlags(kInputFlagNotKeyframable));
+  }
 }
 
 Node *ClipBlock::copy() const
 {
-  ClipBlock* c = new ClipBlock();
-
-  CopyParameters(this, c);
-
-  return c;
-}
-
-Block::Type ClipBlock::type() const
-{
-  return kClip;
+  return new ClipBlock();
 }
 
 QString ClipBlock::Name() const
@@ -48,7 +45,7 @@ QString ClipBlock::Name() const
 
 QString ClipBlock::id() const
 {
-  return "org.olivevideoeditor.Olive.clip";
+  return QStringLiteral("org.olivevideoeditor.Olive.clip");
 }
 
 QString ClipBlock::Description() const
@@ -56,40 +53,78 @@ QString ClipBlock::Description() const
   return tr("A time-based node that represents a media source.");
 }
 
-NodeInput *ClipBlock::texture_input() const
+void ClipBlock::InvalidateCache(const TimeRange& range, const QString& from, int element, qint64 job_time)
 {
-  return texture_input_;
-}
+  Q_UNUSED(element)
 
-void ClipBlock::InvalidateCache(const rational &start_range, const rational &end_range, NodeInput *from)
-{
   // If signal is from texture input, transform all times from media time to sequence time
-  if (from == texture_input_) {
-    rational start = MediaToSequenceTime(start_range);
-    rational end = MediaToSequenceTime(end_range);
+  if (from == kBufferIn) {
+    // Adjust range from media time to sequence time
+    rational start = MediaToSequenceTime(range.in());
+    rational end = MediaToSequenceTime(range.out());
 
-    // Limit cache invalidation to clip lengths
-    start = qMax(start, in());
-    end = qMin(end, out());
-
-    Node::InvalidateCache(start, end, from);
+    super::InvalidateCache(TimeRange(start, end), from, element, job_time);
   } else {
     // Otherwise, pass signal along normally
-    Node::InvalidateCache(start_range, end_range, from);
+    super::InvalidateCache(range, from, element, job_time);
   }
 }
 
-TimeRange ClipBlock::InputTimeAdjustment(NodeInput *input, const TimeRange &input_time) const
+TimeRange ClipBlock::InputTimeAdjustment(const QString& input, int element, const TimeRange& input_time) const
 {
-  if (input == texture_input_) {
+  Q_UNUSED(element)
+
+  if (input == kBufferIn) {
     return TimeRange(SequenceToMediaTime(input_time.in()), SequenceToMediaTime(input_time.out()));
   }
 
-  return Block::InputTimeAdjustment(input, input_time);
+  return super::InputTimeAdjustment(input, element, input_time);
 }
 
-NodeValueTable ClipBlock::Value(const NodeValueDatabase &value) const
+TimeRange ClipBlock::OutputTimeAdjustment(const QString& input, int element, const TimeRange& input_time) const
 {
-  // We just pass through the data here, the renderer should have gotten the correct time from InputTimeAdjustment
-  return value.Merge();
+  Q_UNUSED(element)
+
+  if (input == kBufferIn) {
+    return TimeRange(MediaToSequenceTime(input_time.in()), MediaToSequenceTime(input_time.out()));
+  }
+
+  return super::OutputTimeAdjustment(input, element, input_time);
+}
+
+NodeValueTable ClipBlock::Value(const QString &output, NodeValueDatabase &value) const
+{
+  Q_UNUSED(output)
+
+  // We discard most values here except for the buffer we received
+  NodeValue data = value[kBufferIn].GetWithMeta(NodeValue::kBuffer);
+
+  NodeValueTable table;
+  if (data.type() != NodeValue::kNone) {
+    table.Push(data);
+  }
+  return table;
+}
+
+void ClipBlock::Retranslate()
+{
+  super::Retranslate();
+
+  if (HasInputWithID(kBufferIn)) {
+    SetInputName(kBufferIn, tr("Buffer"));
+  }
+}
+
+void ClipBlock::Hash(const QString &out, QCryptographicHash &hash, const rational &time, const VideoParams &video_params) const
+{
+  Q_UNUSED(out)
+
+  if (IsInputConnected(kBufferIn)) {
+    rational t = InputTimeAdjustment(kBufferIn, -1, TimeRange(time, time)).in();
+
+    NodeOutput output = GetConnectedOutput(kBufferIn);
+    output.node()->Hash(output.output(), hash, t, video_params);
+  }
+}
+
 }

@@ -1,7 +1,7 @@
 /***
 
   Olive - Non-Linear Video Editor
-  Copyright (C) 2019 Olive Team
+  Copyright (C) 2021 Olive Team
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,9 +21,14 @@
 #include "keysequenceeditor.h"
 
 #include <QAction>
+#include <QKeyEvent>
+
+namespace olive {
+
+#define super QKeySequenceEdit
 
 KeySequenceEditor::KeySequenceEditor(QWidget* parent, QAction* a)
-  : QKeySequenceEdit(parent), action(a) {
+  : super(parent), action(a) {
   setKeySequence(action->shortcut());
 }
 
@@ -45,4 +50,28 @@ QString KeySequenceEditor::export_shortcut() {
     return action->property("id").toString() + "\t" + ks;
   }
   return nullptr;
+}
+
+void KeySequenceEditor::keyPressEvent(QKeyEvent *e)
+{
+  if (e->key() == Qt::Key_Backspace) {
+    clear();
+  } else if (e->key() == Qt::Key_Escape) {
+    e->ignore();
+  } else{
+    super::keyPressEvent(e);
+  }
+}
+
+void KeySequenceEditor::keyReleaseEvent(QKeyEvent *e)
+{
+  if (e->key() == Qt::Key_Backspace) {
+    // Do nothing
+  } else if (e->key() == Qt::Key_Escape) {
+    e->ignore();
+  } else {
+    super::keyReleaseEvent(e);
+  }
+}
+
 }

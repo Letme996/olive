@@ -1,7 +1,7 @@
 /***
 
   Olive - Non-Linear Video Editor
-  Copyright (C) 2019 Olive Team
+  Copyright (C) 2021 Olive Team
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -28,68 +28,71 @@
 #include <QTimer>
 #include <QWidget>
 
+#include "audiowaveformview.h"
 #include "common/rational.h"
 #include "node/output/viewer/viewer.h"
-#include "render/backend/opengl/openglbackend.h"
-#include "render/backend/opengl/opengltexture.h"
-#include "render/backend/audio/audiobackend.h"
-#include "viewerglwidget.h"
+#include "panel/scope/scope.h"
+#include "render/previewautocacher.h"
+#include "threading/threadticketwatcher.h"
+#include "viewerdisplay.h"
+#include "viewerplaybacktimer.h"
+#include "viewerqueue.h"
 #include "viewersizer.h"
+#include "viewerwindow.h"
 #include "widget/playbackcontrols/playbackcontrols.h"
-#include "widget/timeruler/timeruler.h"
+#include "widget/timebased/timebasedwidget.h"
+
+namespace olive {
 
 /**
  * @brief An OpenGL-based viewer widget with playback controls (a PlaybackControls widget).
  */
-class ViewerWidget : public QWidget
+class ViewerWidget : public TimeBasedWidget
 {
   Q_OBJECT
 public:
-  ViewerWidget(QWidget* parent);
+  ViewerWidget(QWidget* parent = nullptr);
+
+  virtual ~ViewerWidget() override;
 
   void SetPlaybackControlsEnabled(bool enabled);
 
   void SetTimeRulerEnabled(bool enabled);
 
-  const double& scale();
-
-  rational GetTime();
-
-  void SetScale(const double& scale_);
-
-  void SetTime(const int64_t& time);
-
   void TogglePlayPause();
 
-  bool IsPlaying();
+  bool IsPlaying() const;
 
-  void ConnectViewerNode(ViewerOutput* node);
+  /**
+   * @brief Enable or disable the color management menu
+   *
+   * While the Viewer is _always_ color managed, In some contexts, the color management may be controlled from an
+   * external UI making the menu unnecessary.
+   */
+  void SetColorMenuEnabled(bool enabled);
 
-  void DisconnectViewerNode();
+  void SetMatrix(const QMatrix4x4& mat);
+
+  /**
+   * @brief Creates a ViewerWindow widget and places it full screen on another screen
+   *
+   * If `screen` is nullptr, the screen will be automatically selected as whichever one contains the mouse cursor.
+   */
+  void SetFullScreen(QScreen* screen = nullptr);
+
+  ColorManager* color_manager() const
+  {
+    return display_widget_->color_manager();
+  }
+
+  void SetGizmos(Node* node);
 
 public slots:
-  /**
-   * @brief Set the texture to draw and draw it
-   *
-   * Wrapper function for ViewerGLWidget::SetTexture().
-   *
-   * @param tex
-   */
-  void SetTexture(OpenGLTexturePtr tex);
-
-  void SetTimebase(const rational& r);
-
-  void GoToStart();
-
-  void PrevFrame();
+  void Play(bool in_to_out_only);
 
   void Play();
 
   void Pause();
-
-  void NextFrame();
-
-  void GoToEnd();
 
   void ShuttleLeft();
 
@@ -97,59 +100,215 @@ public slots:
 
   void ShuttleRight();
 
+  void SetColorTransform(const ColorTransform& transform);
+
+  /**
+   * @brief Wrapper for ViewerGLWidget::SetSignalCursorColorEnabled()
+   */
+  void SetSignalCursorColorEnabled(bool e);
+
+  void SetAutoCacheEnabled(bool e);
+
+  void CacheEntireSequence();
+
+  void CacheSequenceInOut();
+
+  void SetViewerResolution(int width, int height);
+
+  void SetViewerPixelAspect(const rational& ratio);
+
+  void UpdateTextureFromNode();
+
 signals:
-  void TimeChanged(const int64_t&);
+  /**
+   * @brief Wrapper for ViewerGLWidget::CursorColor()
+   */
+  void CursorColor(const Color& reference, const Color& display);
+
+  /**
+   * @brief Signal emitted when a new frame is loaded
+   */
+  void TextureChanged(TexturePtr t);
+
+  /**
+   * @brief Request a scope panel
+   *
+   * As a widget, we don't handle panels, but a parent panel may pick this signal up.
+   */
+  void RequestScopePanel(ScopePanel::Type type);
+
+  /**
+   * @brief Wrapper for ViewerGLWidget::ColorProcessorChanged()
+   */
+  void ColorProcessorChanged(ColorProcessorPtr processor);
+
+  /**
+   * @brief Wrapper for ViewerGLWidget::ColorManagerChanged()
+   */
+  void ColorManagerChanged(ColorManager* color_manager);
 
 protected:
+  virtual void TimebaseChangedEvent(const rational &) override;
+  virtual void TimeChangedEvent(const int64_t &) override;
+
+  virtual void ConnectNodeEvent(ViewerOutput *) override;
+  virtual void DisconnectNodeEvent(ViewerOutput *) override;
+  virtual void ConnectedNodeChangeEvent(ViewerOutput *) override;
+
+  virtual void ScaleChangedEvent(const double& s) override;
+
   virtual void resizeEvent(QResizeEvent *event) override;
+
+  PlaybackControls* controls_;
+
+  ViewerDisplayWidget* display_widget() const
+  {
+    return display_widget_;
+  }
 
 private:
   void UpdateTimeInternal(int64_t i);
 
-  void UpdateTextureFromNode(const rational &time);
+  void PlayInternal(int speed, bool in_to_out_only);
 
-  void PlayInternal(int speed);
+  void PauseInternal();
 
   void PushScrubbedAudio();
 
-  OpenGLBackend* video_renderer_;
-  AudioBackend* audio_renderer_;
+  void UpdateMinimumScale();
+
+  void SetColorTransform(const ColorTransform& transform, ViewerDisplayWidget* sender);
+
+  QString GetCachedFilenameFromTime(const rational& time);
+
+  bool FrameExistsAtTime(const rational& time);
+
+  bool ViewerMightBeAStill();
+
+  void SetDisplayImage(QVariant frame, bool main_only = false);
+
+  void RequestNextFrameForQueue(bool prioritize = false, bool increment = true);
+
+  RenderTicketPtr GetFrame(const rational& t, bool prioritize);
+
+  void FinishPlayPreprocess();
+
+  int DeterminePlaybackQueueSize();
+
+  void PopOldestFrameFromPlaybackQueue();
+
+  static FramePtr DecodeCachedImage(const QString &cache_path, const QByteArray &hash, const rational& time);
+
+  static void DecodeCachedImage(RenderTicketPtr ticket, const QString &cache_path, const QByteArray &hash, const rational& time);
+
+  bool ShouldForceWaveform() const;
+
+  void SetEmptyImage();
+
+  void UpdateAutoCacher();
+
+  void ClearAutoCacherQueue();
+
+  QStackedWidget* stack_;
 
   ViewerSizer* sizer_;
 
-  ViewerGLWidget* gl_widget_;
+  QAtomicInt playback_speed_;
 
-  PlaybackControls* controls_;
+  qint64 frame_cache_job_time_;
 
-  TimeRuler* ruler_;
+  int64_t last_time_;
 
-  QScrollBar* scrollbar_;
+  bool color_menu_enabled_;
 
-  rational time_base_;
+  bool time_changed_from_timer_;
 
-  double time_base_dbl_;
+  bool play_in_to_out_only_;
 
-  QTimer playback_timer_;
+  AudioWaveformView* waveform_view_;
 
-  qint64 start_msec_;
-  int64_t start_timestamp_;
+  QHash<QScreen*, ViewerWindow*> windows_;
 
-  ViewerOutput* viewer_node_;
+  ViewerDisplayWidget* display_widget_;
 
-  int playback_speed_;
+  ViewerDisplayWidget* context_menu_widget_;
+
+  ViewerPlaybackTimer playback_timer_;
+  QTimer playback_backup_timer_;
+
+  ViewerQueue playback_queue_;
+  int64_t playback_queue_next_frame_;
+
+  bool prequeuing_;
+
+  QList<RenderTicketWatcher*> nonqueue_watchers_;
+
+  rational last_length_;
+
+  int prequeue_length_;
+
+  PreviewAutoCacher auto_cacher_;
+
+  QTimer audio_restart_timer_;
+
+  int active_queue_jobs_;
+
+  rational cache_time_;
+
+  static QVector<ViewerWidget*> instances_;
 
 private slots:
-  void RulerTimeChange(int64_t);
-
   void PlaybackTimerUpdate();
-
-  void RendererCachedFrame(const rational& time, QVariant value);
-  void RendererCachedTime(const rational& time);
-
-  void SizeChangedSlot(int width, int height);
 
   void LengthChangedSlot(const rational& length);
 
+  void InterlacingChangedSlot(VideoParams::Interlacing interlacing);
+
+  void UpdateRendererVideoParameters();
+
+  void UpdateRendererAudioParameters();
+
+  void ShowContextMenu(const QPoint& pos);
+
+  void SetZoomFromMenu(QAction* action);
+
+  void ViewerShiftedRange(const olive::rational& from, const olive::rational& to);
+
+  void UpdateStack();
+
+  void ContextMenuSetFullScreen(QAction* action);
+
+  void ContextMenuDisableSafeMargins();
+
+  void ContextMenuSetSafeMargins();
+
+  void ContextMenuSetCustomSafeMargins();
+
+  void WindowAboutToClose();
+
+  void ContextMenuScopeTriggered(QAction* action);
+
+  void RendererGeneratedFrame();
+
+  void RendererGeneratedFrameForQueue();
+
+  void ViewerInvalidatedVideoRange(const olive::TimeRange &range);
+
+  void ManualSwitchToWaveform(bool e);
+
+  void TimeChangedFromWaveform(qint64 t);
+
+  void DragEntered(QDragEnterEvent* event);
+
+  void Dropped(QDropEvent* event);
+
+  void AudioCacheInvalidated();
+  void AudioCacheValidated();
+
+  void StartAudioOutput();
+
 };
+
+}
 
 #endif // VIEWER_WIDGET_H

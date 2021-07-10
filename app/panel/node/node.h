@@ -1,7 +1,7 @@
 /***
 
   Olive - Non-Linear Video Editor
-  Copyright (C) 2019 Olive Team
+  Copyright (C) 2021 Olive Team
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,6 +24,8 @@
 #include "widget/nodeview/nodeview.h"
 #include "widget/panel/panel.h"
 
+namespace olive {
+
 /**
  * @brief A PanelWidget wrapper around a NodeView
  */
@@ -33,21 +35,106 @@ class NodePanel : public PanelWidget
 public:
   NodePanel(QWidget* parent);
 
-  void SetGraph(NodeGraph* graph);
+  NodeGraph* GetGraph() const
+  {
+    return node_view_->GetGraph();
+  }
 
-protected:
-  virtual void changeEvent(QEvent* e) override;
+  void SetGraph(NodeGraph *graph)
+  {
+    node_view_->SetGraph(graph);
+  }
+
+  virtual void SelectAll() override
+  {
+    node_view_->SelectAll();
+  }
+
+  virtual void DeselectAll() override
+  {
+    node_view_->DeselectAll();
+  }
+
+  virtual void DeleteSelected() override
+  {
+    node_view_->DeleteSelected();
+  }
+
+  virtual void CutSelected() override
+  {
+    node_view_->CopySelected(true);
+  }
+
+  virtual void CopySelected() override
+  {
+    node_view_->CopySelected(false);
+  }
+
+  virtual void Paste() override
+  {
+    node_view_->Paste();
+  }
+
+  virtual void Duplicate() override
+  {
+    node_view_->Duplicate();
+  }
+
+  virtual void SetColorLabel(int index) override
+  {
+    node_view_->SetColorLabel(index);
+  }
+
+  virtual void ZoomIn() override
+  {
+    node_view_->ZoomIn();
+  }
+
+  virtual void ZoomOut() override
+  {
+    node_view_->ZoomOut();
+  }
+
+public slots:
+  void Select(const QVector<Node*>& nodes)
+  {
+    node_view_->Select(nodes);
+  }
+
+  void SelectWithDependencies(const QVector<Node*>& nodes)
+  {
+    node_view_->SelectWithDependencies(nodes);
+  }
+
+  void SelectBlocks(const QVector<Block*>& blocks)
+  {
+    QVector<Node*> nodes(blocks.size());
+    memcpy(nodes.data(), blocks.constData(), blocks.size() * sizeof(Block*));
+    node_view_->SelectWithDependencies(nodes);
+  }
+
+  void DeselectBlocks(const QVector<Block*>& nodes)
+  {
+    Q_UNUSED(nodes)
+    qDebug() << "Stub";
+    //node_view_->DeselectBlocks(nodes);
+  }
 
 signals:
-  /**
-   * @brief Wrapper for NodeView::SelectionChanged()
-   */
-  void SelectionChanged(QList<Node*> selected_nodes);
+  void NodesSelected(const QVector<Node*>& nodes);
+
+  void NodesDeselected(const QVector<Node*>& nodes);
 
 private:
-  void Retranslate();
+  virtual void Retranslate() override
+  {
+    SetTitle(tr("Node Editor"));
+  }
 
   NodeView* node_view_;
+
 };
+
+}
 
 #endif // NODEPANEL_H

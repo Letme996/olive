@@ -1,7 +1,7 @@
 /***
 
   Olive - Non-Linear Video Editor
-  Copyright (C) 2019 Olive Team
+  Copyright (C) 2021 Olive Team
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 #ifndef NODEPARAMVIEWITEM_H
 #define NODEPARAMVIEWITEM_H
 
+#include <QDockWidget>
 #include <QGridLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -28,56 +29,204 @@
 #include <QWidget>
 
 #include "node/node.h"
+#include "nodeparamviewarraywidget.h"
+#include "nodeparamviewconnectedlabel.h"
+#include "nodeparamviewkeyframecontrol.h"
 #include "nodeparamviewwidgetbridge.h"
+#include "widget/clickablelabel/clickablelabel.h"
+#include "widget/collapsebutton/collapsebutton.h"
 
-class NodeParamViewItemTitleBar : public QWidget {
-public:
-  NodeParamViewItemTitleBar(QWidget* parent = nullptr);
+namespace olive {
 
-protected:
-  virtual void paintEvent(QPaintEvent *event) override;
-};
-
-class NodeParamViewItem : public QWidget
+class NodeParamViewItemTitleBar : public QWidget
 {
   Q_OBJECT
 public:
-  NodeParamViewItem(QWidget* parent);
+  NodeParamViewItemTitleBar(QWidget* parent = nullptr);
 
-  void AttachNode(Node* n);
+  void SetExpanded(bool e);
 
-  bool CanAddNode(Node *n);
+  void SetText(const QString& s)
+  {
+    lbl_->setText(s);
+    lbl_->setToolTip(s);
+    lbl_->setMinimumWidth(1);
+  }
+
+signals:
+  void ExpandedStateChanged(bool e);
+
+  void PinToggled(bool e);
 
 protected:
-  void changeEvent(QEvent *e) override;
+  virtual void paintEvent(QPaintEvent *event) override;
+
+  virtual void mouseDoubleClickEvent(QMouseEvent *event) override;
 
 private:
-  void SetupUI();
+  bool draw_border_;
 
-  void AddAdditionalNode(Node* n);
+  QLabel* lbl_;
+
+  CollapseButton* collapse_btn_;
+
+};
+
+class NodeParamViewItemBody : public QWidget {
+  Q_OBJECT
+public:
+  NodeParamViewItemBody(Node* node, QWidget* parent = nullptr);
+
+  void SetTimeTarget(Node* target);
+
+  void SetTime(const rational& time);
 
   void Retranslate();
 
-  bool expanded_;
+  int GetElementY(NodeInput c) const;
 
-  NodeParamViewItemTitleBar* title_bar_;
+  // Set the timebase of any timebased widgets contained here
+   void SetTimebase(const rational& timebase);
 
-  QLabel* title_bar_lbl_;
+signals:
+  void RequestSetTime(const rational& time);
 
-  QVector<QLabel*> param_lbls_;
+  void RequestSelectNode(const QVector<Node*>& node);
 
-  QPushButton* title_bar_collapse_btn_;
+  void ArrayExpandedChanged(bool e);
 
-  QWidget* contents_;
+private:
+  void CreateWidgets(QGridLayout *layout, Node* node, const QString& input, int element, int row_index);
 
-  QGridLayout* content_layout_;
+  void UpdateUIForEdgeConnection(const NodeInput &input);
 
-  QList<Node*> nodes_;
+  void PlaceWidgetsFromBridge(QGridLayout *layout, NodeParamViewWidgetBridge* bridge, int row);
 
-  QList<NodeParamViewWidgetBridge*> bridges_;
+  struct InputUI {
+    InputUI();
+
+    QLabel* main_label;
+    NodeParamViewWidgetBridge* widget_bridge;
+    NodeParamViewConnectedLabel* connected_label;
+    NodeParamViewKeyframeControl* key_control;
+    QGridLayout* layout;
+    int row;
+
+    NodeParamViewArrayButton* array_insert_btn;
+    NodeParamViewArrayButton* array_remove_btn;
+  };
+
+  QHash<NodeInput, InputUI> input_ui_map_;
+
+  struct ArrayUI {
+    QWidget* widget;
+    int count;
+    NodeParamViewArrayButton* append_btn;
+  };
+
+  QHash<NodeInputPair, ArrayUI> array_ui_;
+
+  QHash<NodeInputPair, CollapseButton*> array_collapse_buttons_;
+
+  /**
+   * @brief The column to place the keyframe controls in
+   *
+   * Serves as an effective "maximum column" index because the keyframe button is always aligned
+   * to the right edge.
+   */
+  static const int kKeyControlColumn;
+
+  static const int kArrayInsertColumn;
+  static const int kArrayRemoveColumn;
+
+  static const int kWidgetStartColumn;
 
 private slots:
-  void SetExpanded(bool e);
+  void EdgeChanged(const NodeOutput &output, const NodeInput &input);
+
+  void ArrayCollapseBtnPressed(bool checked);
+
+  void InputArraySizeChanged(const QString &input, int old_sz, int size);
+
+  void ArrayAppendClicked();
+
+  void ArrayInsertClicked();
+
+  void ArrayRemoveClicked();
+
+  void ToggleArrayExpanded();
+
+  void ReplaceWidgets(const NodeInput& input);
+
 };
+
+class NodeParamViewItem : public QDockWidget
+{
+  Q_OBJECT
+public:
+  NodeParamViewItem(Node* node, QWidget* parent = nullptr);
+
+  void SetTimeTarget(Node* target);
+
+  void SetTime(const rational& time);
+
+  // Set the timebase of the NodeParamViewItemBody
+  void SetTimebase(const rational& timebase);
+
+  Node* GetNode() const;
+
+  bool IsExpanded() const;
+
+  void SetHighlighted(bool e)
+  {
+    highlighted_ = e;
+
+    update();
+  }
+
+  int GetElementY(const NodeInput& c) const;
+
+public slots:
+  void SetExpanded(bool e);
+
+  void ToggleExpanded();
+
+signals:
+  void RequestSetTime(const rational& time);
+
+  void RequestSelectNode(const QVector<Node*>& node);
+
+  void PinToggled(bool e);
+
+  void ExpandedChanged(bool e);
+
+  void ArrayExpandedChanged(bool e);
+
+  void Moved();
+
+protected:
+  virtual void changeEvent(QEvent *e) override;
+
+  virtual void paintEvent(QPaintEvent *event) override;
+
+  virtual void moveEvent(QMoveEvent *event) override;
+
+private:
+  NodeParamViewItemTitleBar* title_bar_;
+
+  NodeParamViewItemBody* body_;
+
+  Node* node_;
+
+  rational time_;
+
+  bool highlighted_;
+
+private slots:
+  void Retranslate();
+
+};
+
+}
 
 #endif // NODEPARAMVIEWITEM_H

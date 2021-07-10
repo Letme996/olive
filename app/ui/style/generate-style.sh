@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Olive - Non-Linear Video Editor
-# Copyright (C) 2019 Olive Team
+# Copyright (C) 2021 Olive Team
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -60,6 +60,7 @@ truncate -s 0 $QRCFILE
 echo "<RCC>" >> $QRCFILE
 echo "  <qresource prefix=\"/style/$PACKNAME\">" >> $QRCFILE
 echo "    <file>style.css</file>" >> $QRCFILE
+echo "    <file>palette.ini</file>" >> $QRCFILE
 
 OutputPng() {
   echo Creating $2...

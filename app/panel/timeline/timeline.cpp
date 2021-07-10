@@ -1,7 +1,7 @@
 /***
 
   Olive - Non-Linear Video Editor
-  Copyright (C) 2019 Olive Team
+  Copyright (C) 2021 Olive Team
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -20,110 +20,171 @@
 
 #include "timeline.h"
 
+#include "panel/panelmanager.h"
+#include "panel/project/footagemanagementpanel.h"
+
+namespace olive {
+
 TimelinePanel::TimelinePanel(QWidget *parent) :
-  PanelWidget(parent)
+  TimeBasedPanel(QStringLiteral("TimelinePanel"), parent)
 {
-  // FIXME: This won't work if there's ever more than one of this panel
-  setObjectName("TimelinePanel");
-
-  timeline_widget_ = new TimelineWidget();
-  setWidget(timeline_widget_);
-
-  connect(timeline_widget_, SIGNAL(TimeChanged(const int64_t&)), this, SIGNAL(TimeChanged(const int64_t&)));
+  TimelineWidget* tw = new TimelineWidget();
+  SetTimeBasedWidget(tw);
 
   Retranslate();
+
+  connect(tw, &TimelineWidget::BlocksSelected, this, &TimelinePanel::BlocksSelected);
+  connect(tw, &TimelineWidget::BlocksDeselected, this, &TimelinePanel::BlocksDeselected);
 }
 
 void TimelinePanel::Clear()
 {
-  timeline_widget_->Clear();
-}
-
-void TimelinePanel::SetTimebase(const rational &timebase)
-{
-  timeline_widget_->SetTimebase(timebase);
-}
-
-void TimelinePanel::SetTime(const int64_t &timestamp)
-{
-  timeline_widget_->SetTime(timestamp);
-}
-
-void TimelinePanel::ConnectTimelineNode(TimelineOutput *node)
-{
-  timeline_widget_->ConnectTimelineNode(node);
-}
-
-void TimelinePanel::DisconnectTimelineNode()
-{
-  timeline_widget_->DisconnectTimelineNode();
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->Clear();
 }
 
 void TimelinePanel::SplitAtPlayhead()
 {
-  timeline_widget_->SplitAtPlayhead();
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->SplitAtPlayhead();
 }
 
-void TimelinePanel::ZoomIn()
+QByteArray TimelinePanel::SaveSplitterState() const
 {
-  timeline_widget_->ZoomIn();
+  return static_cast<TimelineWidget*>(GetTimeBasedWidget())->SaveSplitterState();
 }
 
-void TimelinePanel::ZoomOut()
+void TimelinePanel::RestoreSplitterState(const QByteArray &state)
 {
-  timeline_widget_->ZoomOut();
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->RestoreSplitterState(state);
 }
 
 void TimelinePanel::SelectAll()
 {
-  timeline_widget_->SelectAll();
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->SelectAll();
 }
 
 void TimelinePanel::DeselectAll()
 {
-  timeline_widget_->DeselectAll();
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->DeselectAll();
 }
 
 void TimelinePanel::RippleToIn()
 {
-  timeline_widget_->RippleToIn();
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->RippleToIn();
 }
 
 void TimelinePanel::RippleToOut()
 {
-  timeline_widget_->RippleToOut();
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->RippleToOut();
 }
 
 void TimelinePanel::EditToIn()
 {
-  timeline_widget_->EditToIn();
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->EditToIn();
 }
 
 void TimelinePanel::EditToOut()
 {
-  timeline_widget_->EditToOut();
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->EditToOut();
 }
 
-void TimelinePanel::GoToPrevCut()
+void TimelinePanel::DeleteSelected()
 {
-  timeline_widget_->GoToPrevCut();
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->DeleteSelected(false);
 }
 
-void TimelinePanel::GoToNextCut()
+void TimelinePanel::RippleDelete()
 {
-  timeline_widget_->GoToNextCut();
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->DeleteSelected(true);
 }
 
-void TimelinePanel::changeEvent(QEvent *e)
+void TimelinePanel::IncreaseTrackHeight()
 {
-  if (e->type() == QEvent::LanguageChange) {
-    Retranslate();
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->IncreaseTrackHeight();
+}
+
+void TimelinePanel::DecreaseTrackHeight()
+{
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->DecreaseTrackHeight();
+}
+
+void TimelinePanel::Insert()
+{
+  FootageManagementPanel* project_panel = PanelManager::instance()->MostRecentlyFocused<FootageManagementPanel>();
+
+  if (project_panel) {
+    InsertFootageAtPlayhead(project_panel->GetSelectedFootage());
   }
-  PanelWidget::changeEvent(e);
+}
+
+void TimelinePanel::Overwrite()
+{
+  FootageManagementPanel* project_panel = PanelManager::instance()->MostRecentlyFocused<FootageManagementPanel>();
+
+  if (project_panel) {
+    OverwriteFootageAtPlayhead(project_panel->GetSelectedFootage());
+  }
+}
+
+void TimelinePanel::ToggleLinks()
+{
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->ToggleLinksOnSelected();
+}
+
+void TimelinePanel::CutSelected()
+{
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->CopySelected(true);
+}
+
+void TimelinePanel::CopySelected()
+{
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->CopySelected(false);
+}
+
+void TimelinePanel::Paste()
+{
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->Paste(false);
+}
+
+void TimelinePanel::PasteInsert()
+{
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->Paste(true);
+}
+
+void TimelinePanel::DeleteInToOut()
+{
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->DeleteInToOut(false);
+}
+
+void TimelinePanel::RippleDeleteInToOut()
+{
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->DeleteInToOut(true);
+}
+
+void TimelinePanel::ToggleSelectedEnabled()
+{
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->ToggleSelectedEnabled();
+}
+
+void TimelinePanel::SetColorLabel(int index)
+{
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->SetColorLabel(index);
+}
+
+void TimelinePanel::InsertFootageAtPlayhead(const QVector<ViewerOutput *> &footage)
+{
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->InsertFootageAtPlayhead(footage);
+}
+
+void TimelinePanel::OverwriteFootageAtPlayhead(const QVector<ViewerOutput *> &footage)
+{
+  static_cast<TimelineWidget*>(GetTimeBasedWidget())->OverwriteFootageAtPlayhead(footage);
 }
 
 void TimelinePanel::Retranslate()
 {
+  TimeBasedPanel::Retranslate();
+
   SetTitle(tr("Timeline"));
-  SetSubtitle(tr("(none)"));
+}
+
 }

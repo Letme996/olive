@@ -1,7 +1,7 @@
 /***
 
   Olive - Non-Linear Video Editor
-  Copyright (C) 2019 Olive Team
+  Copyright (C) 2021 Olive Team
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,6 +23,8 @@
 
 #include "node/block/block.h"
 
+namespace olive {
+
 /**
  * @brief Node that represents a block of Media
  */
@@ -30,27 +32,32 @@ class ClipBlock : public Block
 {
   Q_OBJECT
 public:
-  ClipBlock();
+  ClipBlock(bool create_buffer_in = true);
+
+  NODE_DEFAULT_DESTRUCTOR(ClipBlock)
 
   virtual Node* copy() const override;
-
-  virtual Type type() const override;
 
   virtual QString Name() const override;
   virtual QString id() const override;
   virtual QString Description() const override;
 
-  NodeInput* texture_input() const;
+  virtual void InvalidateCache(const TimeRange& range, const QString& from, int element, qint64 job_time) override;
 
-  virtual void InvalidateCache(const rational &start_range, const rational &end_range, NodeInput *from = nullptr) override;
+  virtual TimeRange InputTimeAdjustment(const QString& input, int element, const TimeRange& input_time) const override;
 
-  virtual TimeRange InputTimeAdjustment(NodeInput* input, const TimeRange& input_time) const override;
+  virtual TimeRange OutputTimeAdjustment(const QString& input, int element, const TimeRange& input_time) const override;
 
-  virtual NodeValueTable Value(const NodeValueDatabase& value) const override;
+  virtual NodeValueTable Value(const QString& output, NodeValueDatabase& value) const override;
 
-private:
-  NodeInput* texture_input_;
+  virtual void Retranslate() override;
+
+  virtual void Hash(const QString& output, QCryptographicHash &hash, const rational &time, const VideoParams& video_params) const override;
+
+  static const QString kBufferIn;
 
 };
+
+}
 
 #endif // TIMELINEBLOCK_H

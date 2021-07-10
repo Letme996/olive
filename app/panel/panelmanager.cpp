@@ -1,7 +1,7 @@
 /***
 
   Olive - Non-Linear Video Editor
-  Copyright (C) 2019 Olive Team
+  Copyright (C) 2021 Olive Team
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,20 +22,23 @@
 
 #include "config/config.h"
 
-PanelManager* olive::panel_manager = nullptr;
+namespace olive {
+
+PanelManager* PanelManager::instance_ = nullptr;
 
 PanelManager::PanelManager(QObject *parent) :
   QObject(parent),
-  locked_(false)
+  locked_(false),
+  last_focused_panel_(nullptr)
 {
 }
 
 void PanelManager::DeleteAllPanels()
 {
-  foreach (PanelWidget* panel, focus_history_) {
-    delete panel;
-  }
+  // Prevent any confusion regarding focus history by clearing it first
+  QList<PanelWidget*> copy = focus_history_;
   focus_history_.clear();
+  qDeleteAll(copy);
 }
 
 const QList<PanelWidget *> &PanelManager::panels()
@@ -78,6 +81,21 @@ bool PanelManager::ArePanelsLocked()
   return locked_;
 }
 
+void PanelManager::CreateInstance()
+{
+  instance_ = new PanelManager();
+}
+
+void PanelManager::DestroyInstance()
+{
+  delete instance_;
+}
+
+PanelManager *PanelManager::instance()
+{
+  return instance_;
+}
+
 void PanelManager::FocusChanged(QWidget *old, QWidget *now)
 {
   Q_UNUSED(old)
@@ -91,25 +109,30 @@ void PanelManager::FocusChanged(QWidget *old, QWidget *now)
     // Use dynamic_cast to test if this object is a PanelWidget
     panel_cast_test = dynamic_cast<PanelWidget*>(parent);
 
-    if (panel_cast_test != nullptr) {
-      // If so, bump this to the top of the focus history
+    if (panel_cast_test) {
 
-      int panel_index = focus_history_.indexOf(panel_cast_test);
+      if (last_focused_panel_ != panel_cast_test) {
+        // If so, bump this to the top of the focus history
+        int panel_index = focus_history_.indexOf(panel_cast_test);
 
-      // Force the old panel to repaint (if there is one) so it hides its border
-      if (!focus_history_.isEmpty()) {
-        focus_history_.first()->SetBorderVisible(false);
+        // Disable highlight border on old panel
+        if (!focus_history_.isEmpty()) {
+          focus_history_.first()->SetBorderVisible(false);
+        }
+
+        // Enable new border's highlight
+        panel_cast_test->SetBorderVisible(true);
+
+        // If it's not in the focus history, prepend it, otherwise move it
+        if (panel_index == -1) {
+          focus_history_.prepend(panel_cast_test);
+        } else {
+          focus_history_.move(panel_index, 0);
+        }
+
+        last_focused_panel_ = panel_cast_test;
+        emit FocusedPanelChanged(panel_cast_test);
       }
-
-      // If it's not in the focus history, prepend it, otherwise move it
-      if (panel_index == -1) {
-        focus_history_.prepend(panel_cast_test);
-      } else {
-        focus_history_.move(panel_index, 0);
-      }
-
-      // Force the panel to repaint so it shows a border
-      panel_cast_test->SetBorderVisible(true);
 
       break;
     }
@@ -121,8 +144,24 @@ void PanelManager::FocusChanged(QWidget *old, QWidget *now)
 void PanelManager::SetPanelsLocked(bool locked)
 {
   foreach (PanelWidget* panel, focus_history_) {
-    panel->SetMovementLocked(locked);
+    // Only affect panels actually in our layout
+    if (!panel->isFloating()) {
+      panel->SetMovementLocked(locked);
+    }
   }
 
   locked_ = locked;
+}
+
+void PanelManager::PanelDestroyed()
+{
+  PanelWidget* panel = static_cast<PanelWidget*>(sender());
+
+  focus_history_.removeOne(panel);
+
+  if (last_focused_panel_ == panel) {
+    last_focused_panel_ = focus_history_.isEmpty() ? nullptr : focus_history_.first();
+  }
+}
+
 }

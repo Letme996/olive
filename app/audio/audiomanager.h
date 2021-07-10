@@ -1,7 +1,7 @@
 /***
 
   Olive - Non-Linear Video Editor
-  Copyright (C) 2019 Olive Team
+  Copyright (C) 2021 Olive Team
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,33 +24,16 @@
 #include <memory>
 #include <QAudioInput>
 #include <QAudioOutput>
+#include <QtConcurrent/QtConcurrent>
 #include <QThread>
 
-#include "audiohybriddevice.h"
+#include "audiovisualwaveform.h"
+#include "common/define.h"
+#include "outputmanager.h"
 #include "render/audioparams.h"
+#include "render/audioplaybackcache.h"
 
-/**
- * @brief A thread for refreshing the total list of devices on the system
- *
- * Refreshing devices causes a noticeable pause in execution. Doing it another thread is intended to avoid this.
- */
-class AudioRefreshDevicesThread : public QThread {
-  Q_OBJECT
-public:
-  AudioRefreshDevicesThread();
-
-  virtual void run() override;
-
-  const QList<QAudioDeviceInfo>& input_devices();
-  const QList<QAudioDeviceInfo>& output_devices();
-
-signals:
-  void ListsReady();
-
-private:
-  QList<QAudioDeviceInfo> input_devices_;
-  QList<QAudioDeviceInfo> output_devices_;
-};
+namespace olive {
 
 /**
  * @brief Audio input and output management class
@@ -62,6 +45,13 @@ class AudioManager : public QObject
 {
   Q_OBJECT
 public:
+  enum Backend {
+    kAudioBackendQt,
+    kAudioBackendCount
+  };
+
+  static QString GetAudioBackendName(Backend b);
+
   static void CreateInstance();
   static void DestroyInstance();
 
@@ -69,16 +59,16 @@ public:
 
   void RefreshDevices();
 
-  bool IsRefreshing();
+  bool IsRefreshingOutputs();
+
+  bool IsRefreshingInputs();
 
   void PushToOutput(const QByteArray& samples);
 
   /**
-   * @brief Start playing audio from QIODevice
-   *
-   * This takes ownership of the QIODevice and will delete it when StopOutput() is called
+   * @brief Start playing audio from AudioPlaybackCache
    */
-  void StartOutput(QIODevice* device);
+  void StartOutput(AudioPlaybackCache* cache, qint64 offset, int playback_speed);
 
   /**
    * @brief Stop audio output immediately
@@ -87,50 +77,63 @@ public:
 
   void SetOutputDevice(const QAudioDeviceInfo& info);
 
-  void SetOutputParams(const AudioRenderingParams& params);
+  void SetOutputParams(const AudioParams& params);
 
   void SetInputDevice(const QAudioDeviceInfo& info);
 
   const QList<QAudioDeviceInfo>& ListInputDevices();
   const QList<QAudioDeviceInfo>& ListOutputDevices();
 
-signals:
-  void DeviceListReady();
+  static void ReverseBuffer(char* buffer, int size, int resolution);
 
-  void SentSamples(QVector<double> averages);
+signals:
+  void OutputListReady();
+
+  void InputListReady();
+
+  void OutputNotified();
+
+  void OutputDeviceStarted(AudioPlaybackCache* cache, qint64 offset, int playback_speed);
+
+  void OutputWaveformStarted(const AudioVisualWaveform* waveform, const rational &start, int playback_speed);
+
+  void AudioParamsChanged(const AudioParams& params);
+
+  void OutputPushed(const QByteArray& data);
+
+  void Stopped();
 
 private:
   AudioManager();
 
-  QList<QAudioDeviceInfo> input_devices_;
+  virtual ~AudioManager() override;
 
+  QList<QAudioDeviceInfo> input_devices_;
   QList<QAudioDeviceInfo> output_devices_;
+
+  bool is_refreshing_inputs_;
+  bool is_refreshing_outputs_;
 
   static AudioManager* instance_;
 
-  AudioHybridDevice output_manager_;
+  QThread output_thread_;
+  AudioOutputManager* output_manager_;
+  bool output_is_set_;
 
-  std::unique_ptr<QAudioOutput> output_;
   QAudioDeviceInfo output_device_info_;
-  AudioRenderingParams output_params_;
+  AudioParams output_params_;
 
   std::unique_ptr<QAudioInput> input_;
   QAudioDeviceInfo input_device_info_;
   QIODevice* input_file_;
 
-  bool refreshing_devices_;
-
-  AudioRefreshDevicesThread refresh_thread_;
-
 private slots:
-  void RefreshThreadDone();
+  void OutputDevicesRefreshed();
 
-  void OutputManagerHasSamples();
-
-  void OutputStateChanged(QAudio::State state);
-
-  void OutputNotified();
+  void InputDevicesRefreshed();
 
 };
+
+}
 
 #endif // AUDIOMANAGER_H

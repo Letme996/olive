@@ -1,7 +1,7 @@
 /***
 
   Olive - Non-Linear Video Editor
-  Copyright (C) 2019 Olive Team
+  Copyright (C) 2021 Olive Team
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,58 +23,27 @@
 
 #include <QOpenGLFunctions>
 
-#include "widget/panel/panel.h"
-#include "widget/viewer/viewer.h"
+#include "viewerbase.h"
+
+namespace olive {
 
 /**
  * @brief Dockable wrapper around a ViewerWidget
  */
-class ViewerPanel : public PanelWidget {
+class ViewerPanel : public ViewerPanelBase {
   Q_OBJECT
 public:
+  ViewerPanel(const QString& object_name, QWidget* parent);
   ViewerPanel(QWidget* parent);
 
-  virtual void ZoomIn() override;
-
-  virtual void ZoomOut() override;
-
-  virtual void GoToStart() override;
-
-  virtual void PrevFrame() override;
-
-  virtual void PlayPause() override;
-
-  virtual void NextFrame() override;
-
-  virtual void GoToEnd() override;
-
-  virtual void ShuttleLeft() override;
-
-  virtual void ShuttleStop() override;
-
-  virtual void ShuttleRight() override;
-
-  void SetTimebase(const rational& timebase);
-
-  void ConnectViewerNode(ViewerOutput* node);
-
-  void DisconnectViewerNode();
-
-  rational GetTime();
-
-public slots:
-  void SetTime(const int64_t& timestamp);
-
 protected:
-  virtual void changeEvent(QEvent* e) override;
-
-signals:
-  void TimeChanged(const int64_t&);
+  virtual void Retranslate() override;
 
 private:
-  void Retranslate();
+  void Init();
 
-  ViewerWidget* viewer_;
 };
+
+}
 
 #endif // VIEWER_PANEL_H

@@ -1,5 +1,5 @@
 # Olive - Non-Linear Video Editor
-# Copyright (C) 2019 Olive Team
+# Copyright (C) 2021 Olive Team
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,11 +16,15 @@
 
 set(OLIVE_SOURCES
   ${OLIVE_SOURCES}
-  audio/audiohybriddevice.h
-  audio/audiohybriddevice.cpp
   audio/audiomanager.h
   audio/audiomanager.cpp
-  audio/sampleformat.h
-  audio/sampleformat.cpp
+  audio/audiovisualwaveform.h
+  audio/audiovisualwaveform.cpp
+  audio/outputdeviceproxy.h
+  audio/outputdeviceproxy.cpp
+  audio/outputmanager.h
+  audio/outputmanager.cpp
+  audio/tempoprocessor.h
+  audio/tempoprocessor.cpp
   PARENT_SCOPE
 )

@@ -1,7 +1,7 @@
 /***
 
   Olive - Non-Linear Video Editor
-  Copyright (C) 2019 Olive Team
+  Copyright (C) 2021 Olive Team
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -20,43 +20,64 @@
 
 #include "param.h"
 
+#include "window/mainwindow/mainwindow.h"
+
+namespace olive {
+
 ParamPanel::ParamPanel(QWidget* parent) :
-  PanelWidget(parent)
+  TimeBasedPanel(QStringLiteral("ParamPanel"), parent)
 {
-  // FIXME: This won't work if there's ever more than one of this panel
-  setObjectName("ParamPanel");
-
-  view_ = new NodeParamView(this);
-
-  setWidget(view_);
+  NodeParamView* view = new NodeParamView();
+  connect(view, &NodeParamView::RequestSelectNode, this, &ParamPanel::RequestSelectNode);
+  connect(view, &NodeParamView::NodeOrderChanged, this, &ParamPanel::NodeOrderChanged);
+  connect(view, &NodeParamView::FocusedNodeChanged, this, &ParamPanel::FocusedNodeChanged);
+  SetTimeBasedWidget(view);
 
   Retranslate();
 }
 
-void ParamPanel::SetNodes(QList<Node *> nodes)
+void ParamPanel::SelectNodes(const QVector<Node *> &nodes)
 {
-  view_->SetNodes(nodes);
+  static_cast<NodeParamView*>(GetTimeBasedWidget())->SelectNodes(nodes);
 
   Retranslate();
 }
 
-void ParamPanel::changeEvent(QEvent *e)
+void ParamPanel::DeselectNodes(const QVector<Node *> &nodes)
 {
-  if (e->type() == QEvent::LanguageChange) {
-    Retranslate();
-  }
-  PanelWidget::changeEvent(e);
+  static_cast<NodeParamView*>(GetTimeBasedWidget())->DeselectNodes(nodes);
+
+  Retranslate();
+}
+
+void ParamPanel::DeleteSelected()
+{
+  static_cast<NodeParamView*>(GetTimeBasedWidget())->DeleteSelected();
+}
+
+void ParamPanel::SelectAll()
+{
+  static_cast<NodeParamView*>(GetTimeBasedWidget())->SelectAll();
+}
+
+void ParamPanel::DeselectAll()
+{
+  static_cast<NodeParamView*>(GetTimeBasedWidget())->DeselectAll();
 }
 
 void ParamPanel::Retranslate()
 {
   SetTitle(tr("Parameter Editor"));
 
-  if (view_->nodes().isEmpty()) {
+  NodeParamView* view = static_cast<NodeParamView*>(GetTimeBasedWidget());
+
+  if (view->GetItemMap().isEmpty()) {
     SetSubtitle(tr("(none)"));
-  } else if (view_->nodes().size() == 1) {
-    SetSubtitle(view_->nodes().first()->Name());
+  } else if (view->GetItemMap().size() == 1) {
+    SetSubtitle(view->GetItemMap().firstKey()->Name());
   } else {
     SetSubtitle(tr("(multiple)"));
   }
+}
+
 }

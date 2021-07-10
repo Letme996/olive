@@ -1,7 +1,7 @@
 /***
 
   Olive - Non-Linear Video Editor
-  Copyright (C) 2019 Olive Team
+  Copyright (C) 2021 Olive Team
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,14 +21,15 @@
 #ifndef TIMELINE_PANEL_H
 #define TIMELINE_PANEL_H
 
-#include "widget/panel/panel.h"
-
+#include "panel/timebased/timebased.h"
 #include "widget/timelinewidget/timelinewidget.h"
+
+namespace olive {
 
 /**
  * @brief Panel container for a TimelineWidget
  */
-class TimelinePanel : public PanelWidget
+class TimelinePanel : public TimeBasedPanel
 {
   Q_OBJECT
 public:
@@ -36,15 +37,11 @@ public:
 
   void Clear();
 
-  void ConnectTimelineNode(TimelineOutput* node);
-
-  void DisconnectTimelineNode();
-
   void SplitAtPlayhead();
 
-  virtual void ZoomIn() override;
+  QByteArray SaveSplitterState() const;
 
-  virtual void ZoomOut() override;
+  void RestoreSplitterState(const QByteArray& state);
 
   virtual void SelectAll() override;
 
@@ -58,26 +55,50 @@ public:
 
   virtual void EditToOut() override;
 
-  virtual void GoToPrevCut() override;
+  virtual void DeleteSelected() override;
 
-  virtual void GoToNextCut() override;
+  virtual void RippleDelete() override;
 
-public slots:
-  void SetTimebase(const rational& timebase);
+  virtual void IncreaseTrackHeight() override;
 
-  void SetTime(const int64_t& timestamp);
+  virtual void DecreaseTrackHeight() override;
+
+  virtual void Insert() override;
+
+  virtual void Overwrite() override;
+
+  virtual void ToggleLinks() override;
+
+  virtual void CutSelected() override;
+
+  virtual void CopySelected() override;
+
+  virtual void Paste() override;
+
+  virtual void PasteInsert() override;
+
+  virtual void DeleteInToOut() override;
+
+  virtual void RippleDeleteInToOut() override;
+
+  virtual void ToggleSelectedEnabled() override;
+
+  virtual void SetColorLabel(int index) override;
+
+  void InsertFootageAtPlayhead(const QVector<ViewerOutput *> &footage);
+
+  void OverwriteFootageAtPlayhead(const QVector<ViewerOutput *> &footage);
 
 protected:
-  virtual void changeEvent(QEvent* e) override;
+  virtual void Retranslate() override;
 
 signals:
-  void TimeChanged(const int64_t& time);
+  void BlocksSelected(const QVector<Block*>& selected_blocks);
 
-private:
-  void Retranslate();
-
-  TimelineWidget* timeline_widget_;
+  void BlocksDeselected(const QVector<Block*>& deselected_blocks);
 
 };
+
+}
 
 #endif // TIMELINE_PANEL_H
